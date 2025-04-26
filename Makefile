@@ -1,28 +1,29 @@
-BOOTLOADER_FOLDER = bootloader
-BOOTLOADER_FILE = bootloader.asm
-BOOTLOADER_PATH = $(BOOTLOADER_FOLDER)/$(BOOTLOADER_FILE)
-
-BIN_FOLDER = bin
-BIN_FILE = boot.bin
-BIN_PATH = $(BIN_FOLDER)/$(BIN_FILE)
-
-
+IMG_PATH = img/os.img
+BOOTLOADER_BIN = bin/bootloader.bin
+KERNEL_BIN = bin/kernel.bin
 IMG_FOLDER = img
-IMG_FILE = os.img
-IMG_PATH = $(IMG_FOLDER)/$(IMG_FILE)
+OBJ_FOLDER = obj
+BIN_FOLDER = bin
 
-all:
-	nasm $(BOOTLOADER_PATH) -f bin -o $(BIN_PATH)
+all: $(IMG_PATH)
+
+$(IMG_PATH): $(BOOTLOADER_BIN) $(KERNEL_BIN)
+	mkdir -p $(IMG_FOLDER)
 	dd if=/dev/zero of=$(IMG_PATH) bs=512 count=2880
-	dd if=$(BIN_PATH) of=$(IMG_PATH) bs=512 seek=0
+	dd if=$(BOOTLOADER_BIN) of=$(IMG_PATH) bs=512 seek=0
+	dd if=$(KERNEL_BIN) of=$(IMG_PATH) bs=512 seek=1
 
-run: all
-	qemu-system-x86_64 -drive format=raw,file=$(BIN_PATH)
+$(BOOTLOADER_BIN): bootloader/bootloader.asm
+	mkdir -p $(BIN_FOLDER)
+	nasm -f bin bootloader/bootloader.asm -o $(BOOTLOADER_BIN)
+
+$(KERNEL_BIN): kernel/kernel.c linker.ld
+	mkdir -p $(OBJ_FOLDER) $(BIN_FOLDER)
+	gcc -m32 -ffreestanding -fno-pie -nostdlib -c kernel/kernel.c -o $(OBJ_FOLDER)/kernel.o
+	ld -m elf_i386 -T linker.ld -o $(KERNEL_BIN) $(OBJ_FOLDER)/kernel.o --oformat binary
 
 clean:
-	rm -rf $(BIN_PATH)
-	rm -rf $(IMG_PATH)
+	rm -rf $(OBJ_FOLDER)/* $(BIN_FOLDER)/* $(IMG_FOLDER)/*
 
-re: clean all
-
-.PHONY: all clean re
+run: all
+	qemu-system-x86_64 $(IMG_PATH) -boot c
